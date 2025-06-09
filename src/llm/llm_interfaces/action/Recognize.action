@@ -1,0 +1,9 @@
+# Goal
+string object_type
+
+---
+# Result
+geometry_msgs/Point[] object_points
+---
+# Feedback
+string current_status

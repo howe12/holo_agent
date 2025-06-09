@@ -1,0 +1,10 @@
+# Goal
+geometry_msgs/Point object_position
+float64  updown_height
+---
+# Result
+bool success
+
+---
+# Feedback
+string current_status

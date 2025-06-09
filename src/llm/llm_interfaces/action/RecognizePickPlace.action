@@ -1,0 +1,12 @@
+# Goal
+string pick_object_type
+string place_object_type
+
+---
+# Result
+geometry_msgs/Point[] pick_items
+geometry_msgs/Point place_item
+
+---
+# Feedback
+string current_status

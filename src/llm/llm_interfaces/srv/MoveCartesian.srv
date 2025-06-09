@@ -1,0 +1,26 @@
+# This format is suitable for the following services
+#   - motion_control/move_cartesian
+#   - motion_control/move_cartesian_euler
+#   - motion_control/move_cartesian_quat
+#   - motion_control/move_cartesian_objetc_frame_point
+
+#- motion_control/move_cartesian
+geometry_msgs/PoseStamped pose_stamped
+
+# motion_control/move_cartesian_euler
+float32[] pose_euler
+
+# motion_control/move_cartesian_quat
+float32[] pose_quat
+
+string pose_link
+
+# motion_control/move_cartesian_objetc_frame_point
+geometry_msgs/TransformStamped base2cam_transform
+geometry_msgs/Point object_point
+string object_frame
+bool use_entry_point
+float32 entry_point_height
+
+---
+bool success

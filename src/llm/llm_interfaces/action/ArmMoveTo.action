@@ -1,0 +1,10 @@
+# Goal Camera axis
+geometry_msgs/Point target_position
+
+---
+# Result
+bool success
+
+---
+# Feedback
+string current_status

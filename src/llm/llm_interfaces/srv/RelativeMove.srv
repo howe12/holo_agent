@@ -1,0 +1,17 @@
+# This format is suitable for the following services
+#   - motion_control/realtive_move
+# valid values for 'state' when setting digital IO or flags
+int8 BASE_FRAME = 0
+int8 EEF_FRAME = 1
+
+float64 dx                              # X方向的相对位移
+float64 dy                              # Y方向的相对位移
+float64 dz                              # Z方向的相对位移
+float64 drx                             # 绕X轴的相对旋转 (弧度)
+float64 dry                             # 绕Y轴的相对旋转 (弧度)
+float64 drz                             # 绕Z轴的相对旋转 (弧度)
+int8 reference_frame                  # "base" 或 "eef"，指示相对运动的参考坐标系
+
+string pose_link
+---
+bool success
