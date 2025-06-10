@@ -22,7 +22,7 @@ setup(
     tests_require=[''],
     entry_points={
         'console_scripts': [
-            "audio_input_local.py = audio_input.audio_input_local:main",
+            "audio_input_local = audio_input.audio_input_local:main",
         ],
     },
 )

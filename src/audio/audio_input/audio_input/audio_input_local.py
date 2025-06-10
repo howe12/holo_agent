@@ -88,7 +88,7 @@ class AudioInput(Node):
         # LLM状态订阅者，监听LLM的状态变化
         self.llm_state_subscriber = self.create_subscription(String, "/llm_state", self.state_listener_callback, 0)
         # 音频转文本结果发布者，发布音频转文本的结果
-        self.audio_to_text_publisher = self.create_publisher(String, "/audio_input_audio_to_text", 0)
+        self.audio_to_text_publisher = self.create_publisher(String, "/llm_input_audio_to_text", 0)
         # 发布节点初始化完成状态
         self.publish_string("llm_audio_input", self.initialization_publisher)
 
