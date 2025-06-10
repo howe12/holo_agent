@@ -30,10 +30,16 @@ class AudioOutput(Node):
         self.p = pyaudio.PyAudio()
         # 语音合成订阅者，监听语音合成请求
         self.audio_output_subscriber = self.create_subscription(String, "/audio_output_content", self.audio_output_callback, 0)
-
+        # LLM状态发布者，发布LLM的当前状态
+        self.llm_state_publisher = self.create_publisher(String, "/llm_state", 0)
 
     def play_wav(self):
         """
+        波频播放函数，读取并播放WAV文件。
+        Args:
+            None
+        Returns:
+            None
         """
         # 打开WAV文件
         wf = wave.open(self.tmp_wav_file, "rb")
@@ -57,6 +63,11 @@ class AudioOutput(Node):
 
     def audio_output_callback(self,msg):
         """
+        语音合成回调函数，接收语音合成请求，进行语音合成并播放。
+        Args:
+            msg (String): 语音合成请求消息，包含要合成的文本。
+        Returns:
+            None
         """
         # 语音合成
         output = self.sambert_hifigan_tts(input=msg.data,voice='zhizhe_emo')
@@ -66,6 +77,11 @@ class AudioOutput(Node):
             f.write(wav)
         # 播放音频文件
         self.play_wav()
+
+        # 发布语音识别命令
+        msg = String()
+        msg.data = "listening"
+        self.llm_state_publisher.publish(msg)
 
 
 def main(args=None):

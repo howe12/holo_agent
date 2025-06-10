@@ -22,7 +22,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "audio_output_local.py = audio_output.audio_output_local:main",
+            "audio_output_local = audio_output.audio_output_local:main",
         ],
     },
 )
