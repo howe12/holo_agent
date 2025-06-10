@@ -47,6 +47,7 @@ import os
 import time
 from http import HTTPStatus
 from random import randint
+import re
 # import dashscope
 # from dashscope import Generation, TextEmbedding, MultiModalConversation
 # from dashscope.api_entities.dashscope_response import Role
@@ -68,7 +69,7 @@ class ChatLLMNode(Node):
         self.llm_response_type_publisher = self.create_publisher(String, "/llm_response_type", 0)
         self.llm_feedback_publisher = self.create_publisher(String, "/llm_feedback_to_user", 0)
         self.vlm_feedback_publisher = self.create_publisher(String, "/vlm_feedback_to_user", 0)
-        self.output_publisher = self.create_publisher(String, "ChatLLM_text_output", 10) # ChatLLM反馈信息发布者
+        self.output_publisher = self.create_publisher(String, "audio_output_content", 10) # ChatLLM反馈信息发布者
         self.llm_state_subscriber = self.create_subscription(String, "/llm_state", self.state_listener_callback, 0)
         self.llm_input_subscriber = self.create_subscription(String, "/llm_input_audio_to_text", self.llm_callback, 0)
 
@@ -155,7 +156,9 @@ class ChatLLMNode(Node):
         # 记录日志，发送消息给Qwen模型
         # self.get_logger().info(f"发送消息到Qwen: {messages_input}")
 
-        # 调用生成模型 'qwen-turbo' 来生成响应
+        # --------------------------------------------------------------
+        # 调用在线'qwen-turbo'模型
+
         # response = Generation.call(
         #     model='qwen-turbo',  # 使用qwen-turbo模型
         #     messages=messages_input,  # 输入消息
@@ -167,25 +170,40 @@ class ChatLLMNode(Node):
         # )
 
         # --------------------------------------------------------------
-
-
         # 调用本地MiniPCM3模型
-        url = "http://localhost:8080/completion"
-        headers = {
-            "Content-Type": "application/json"
-        }
-        data = {
-            # "prompt": "Which company released MiniCPM3?",
-            # "n_predict": 128
-            # "image": "/home/leo/Pictures/1.png",
-            "prompt": str(messages_input),
-            "n_predict": 128
-        }
-        response = requests.post(url, json=data, headers=headers)
-        result = response.json()["content"]
-        # self.get_logger().info(f"从MiniPCM3得到回复: {response.json()}")
-        self.get_logger().info(f"\033[32m 从MiniPCM3得到回复: \n{result}\033[0m")
+
+        # url = "http://localhost:8080/completion"
+        # headers = {
+        #     "Content-Type": "application/json"
+        # }
+        # data = {
+        #     # "prompt": "Which company released MiniCPM3?",
+        #     # "n_predict": 128
+        #     # "image": "/home/leo/Pictures/1.png",
+        #     "prompt": str(messages_input),
+        #     "n_predict": 128
+        # }
+        # response = requests.post(url, json=data, headers=headers)
+        # result = response.json()["content"]
+        # # self.get_logger().info(f"从MiniPCM3得到回复: {response.json()}")
+        # self.get_logger().info(f"\033[32m 从MiniPCM3得到回复: \n{result}\033[0m")
+        
         # --------------------------------------------------------------
+        # 调用局域网ollama服务 qwen3:4b模型
+
+        url = "http://192.168.100.244:11434/api/generate"
+        data = {
+            "model": "qwen3:4b",
+            "prompt": str(messages_input),
+            "think": False,  # 关键参数：关闭深度思考
+            "stream": False  # 关闭流式响应以获取完整结果
+        }
+
+        response = requests.post(url, json=data)
+        result = response.json()["response"]
+        self.get_logger().info(f"\033[32m 从qwen3:4b得到回复: \n{result}\033[0m")
+        # --------------------------------------------------------------
+
 
         # 记录日志，检查响应的状态
         # if response.status_code == HTTPStatus.OK:
@@ -214,13 +232,25 @@ class ChatLLMNode(Node):
         """
         # 从响应中获取消息内容
         # chunk = llm_response.output.choices[0]['message']['content']
-        chunk = llm_response.json()["content"]
+        chunk = llm_response.json()["response"]
         # 初始化消息文本，默认为None
         content = None
         # 初始化函数调用信息，默认为None
         function_call = None
         # 初始化函数调用标志，0表示无函数调用，1表示有函数调用
         function_flag = 0
+
+        # 新增：处理包含 <think> 标签的情况
+        start_tag = "<think>"
+        end_tag = "</think>"
+        if start_tag in chunk and end_tag in chunk:
+
+            chunk = re.sub(r'<think>.*?</think>', '', chunk, flags=re.DOTALL).strip()
+            # start_index = chunk.find(start_tag) + len(start_tag)
+            # end_index = chunk.find(end_tag)
+            # # 提取标签内的内容并去除首尾空格
+            # content = chunk[start_index:end_index].strip()
+            # return content, function_call, function_flag
 
         # 检查消息内容是否以 ```json 开头或包含 ```json
         if chunk.startswith('```json') or chunk.find('```json') != -1:
@@ -436,7 +466,7 @@ class ChatLLMNode(Node):
         self.get_logger().info(f"\033[32m 收到的输入消息: {msg.data}\033[0m")
 
         # 2. 将用户消息添加到聊天历史记录中,根据对话历史生成聊天回复
-        user_prompt = msg.data
+        user_prompt = "/nothink" + msg.data
         self.add_message_to_history("user", user_prompt)
 
         # 3. 生成LLM响应
@@ -469,6 +499,7 @@ class ChatLLMNode(Node):
                 
                 # 记录状态: 用户反馈
                 self.publish_string(text, self.llm_feedback_publisher)
+                self.publish_string(text, self.output_publisher)
                 self.get_logger().info(f"\033[36m 状态: 对话模式\033[0m")
                 
         else:
