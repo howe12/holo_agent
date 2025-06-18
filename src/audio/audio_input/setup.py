@@ -13,7 +13,7 @@ setup(
         ('share/' + package_name + '/resource', glob('resource/*')),
     ],
     # install_requires=['setuptools', 'llm_config'],
-    install_requires=['setuptools'],
+    install_requires=['setuptools',"llm_config", "llm_interfaces"],
     zip_safe=True,
     maintainer='howe',
     maintainer_email='howe12@126.com',
@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             "audio_input_local = audio_input.audio_input_local:main",
+            "audio_input_bt = audio_input.audio_input_bt:main",
         ],
     },
 )
