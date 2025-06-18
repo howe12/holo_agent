@@ -1,0 +1,6 @@
+# 请求
+string input_data
+---
+# 响应
+bool success
+string output_data

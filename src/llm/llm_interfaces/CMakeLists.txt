@@ -26,6 +26,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/MoveToPickPlace.action"
   "action/Recognize.action"
   "srv/RecognizePickPlace.srv"
+  "srv/BehavioursTree.srv"
   DEPENDENCIES builtin_interfaces geometry_msgs
  )
 
