@@ -16,7 +16,7 @@ setup(
     install_requires=["setuptools", "llm_config", "llm_interfaces"],
     zip_safe=True,
     maintainer='aubo',
-    maintainer_email='zhd172@gmail.com',
+    maintainer_email='howe12@126.com',
     description='The llm_robot package provides a ChatGPT function call server to simulate function calls for any robot',
     license="Apache-2.0",
     tests_require=['pytest'],
@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             "motion_robot = llm_robot.motion_tasks_robot:main",
             "arm_robot = llm_robot.arm_robot:main",
+            "llm_bt_builder = llm_robot.builder:main",
         ],
     },
 )
