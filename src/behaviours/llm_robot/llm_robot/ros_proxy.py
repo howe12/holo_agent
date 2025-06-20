@@ -11,6 +11,7 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
     def __init__(self, name, node_name):
         super().__init__(name=name)
         self.node_name = node_name  # 要调用的ROS2节点名称
+        print (self.node_name)
         self.client = None
         self.response = None
         self.logger = None
@@ -26,11 +27,15 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         """
         
         # 从传入参数获取ROS节点实例
-        self.ros_node = kwargs.get('ros_node')
+        self.ros_node = kwargs.get(self.node_name)
+
+        self.logger = self.ros_node.get_logger()
+        self.logger.info(f"Setting up ROSProxy for node: {self.node_name}")
+        
         if not self.ros_node:
             raise RuntimeError("ROS Node instance not provided to behavior")
             
-        self.logger = self.ros_node.get_logger()
+        
         
         # 使用正确的节点实例创建客户端
         self.client = self.ros_node.create_client(
