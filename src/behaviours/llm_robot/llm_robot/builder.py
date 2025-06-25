@@ -28,6 +28,12 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         super().__init__(name=name)
         self.node_name = node_name
         self.service_type = service_type
+
+        self.subscriptions = []
+        self.publishers = []
+        self.services = []
+        self.clients = []  # 然后在 setup 中添加客户端实例
+
         self.client = None
         self.response = None
         self.logger = None
@@ -61,7 +67,10 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
             f"audio_input"
         )
         
-        self.delay(3)
+        # 修复 2: 将客户端添加到框架管理的列表
+        self.clients.append(self.client)  # 关键！py_trees_ros 需要此引用
+
+        # self.delay(3)
         # 等待服务可用
         if not self.client.wait_for_service(timeout_sec=5.0):
             self.logger.error(f"Service /audio_input not available")
@@ -163,7 +172,7 @@ class BehaviorTreeBuilder(Node):
             # 创建行为树实例
             self.tree = py_trees_ros.trees.BehaviourTree(
                 root=root,
-                # node=self,
+                node=self,
                 unicode_tree_debug=True
             )
 
@@ -174,26 +183,9 @@ class BehaviorTreeBuilder(Node):
             
             # 循环设置行为树直到成功或超时
             setup_complete = False
-            while not self.tree.setup():
-                # 检查超时
-                elapsed_time = clock.now() - start_time
-                if elapsed_time > timeout_duration:
-                    self.logger.error("Behavior tree setup timed out after 30 seconds")
-                    return False
-                
-                # 短暂休眠减少CPU使用
-                rclpy.spin_once(self, timeout_sec=0.1)
-
-            # while not setup_complete:
-            #     # 尝试设置行为树
-            #     if self.tree.setup():  # 短暂阻塞
-            #         setup_complete = True
-            #         self.logger.info("Behavior tree setup completed")
-            #         break
-                
-            #     elapsed_time = clock.now() - start_time
-
+            # while not self.tree.setup():
             #     # 检查超时
+            #     elapsed_time = clock.now() - start_time
             #     if elapsed_time > timeout_duration:
             #         self.logger.error("Behavior tree setup timed out after 30 seconds")
             #         return False
@@ -201,16 +193,35 @@ class BehaviorTreeBuilder(Node):
             #     # 短暂休眠减少CPU使用
             #     rclpy.spin_once(self, timeout_sec=0.1)
 
-            # # 设置行为树
-            # if not self.tree.setup(timeout=30):
-            #     self.logger.error("Failed to setup behavior tree")
-            #     return False
+            while not setup_complete:
+                result_setup = self.tree.setup()
+                self.logger.info(f"设置行为树: {result_setup}")
+                # 尝试设置行为树
+                if result_setup:  # 短暂阻塞
+                    setup_complete = True
+                    self.logger.info("Behavior tree setup completed")
+                    break
+                
+                elapsed_time = clock.now() - start_time
+
+                # 检查超时
+                if elapsed_time > timeout_duration:
+                    self.logger.error("Behavior tree setup timed out after 30 seconds")
+                    return False
+                
+                # 短暂休眠减少CPU使用
+                rclpy.spin_once(self, timeout_sec=0.1)
+
+            # 设置行为树
+            if not self.tree.setup(timeout=30):
+                self.logger.error("Failed to setup behavior tree")
+                return False
                 
             # 创建定时器执行行为树tick
-            self.tree_timer = self.create_timer(
-                0.1,  # 10Hz
-                self.tick_tree
-            )
+            # self.tree_timer = self.create_timer(
+            #     0.1,  # 10Hz
+            #     self.tick_tree
+            # )
             
             self.logger.info("Behavior tree started successfully")
             return True
