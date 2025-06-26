@@ -1,4 +1,4 @@
-# fastmcp_server_demo.py
+
 from fastmcp import FastMCP
 
 mcp = FastMCP("Demo 🚀")

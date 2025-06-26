@@ -1,4 +1,4 @@
-# fastmcp_client_demo.py
+
 from fastmcp import Client
 import asyncio
 
