@@ -7,10 +7,17 @@ import rclpy
 import sys
 from rclpy.node import Node
 from llm_interfaces.srv import BehavioursTree
+from py_trees.blackboard import Client
 
 import time
 from rclpy.clock import Clock
 from rclpy.time import Duration
+
+# # 首先创建全局黑板实例
+# blackboard = py_trees.blackboard.Blackboard()
+# # 在节点外部设置初始值
+# blackboard.set("proxy_input", "默认输入值")  # 可以是任何数据类型
+
 
 class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
     """
@@ -39,7 +46,8 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         self.current_future = None
         
         # 黑板书设置
-        self.blackboard = self.attach_blackboard_client(name=f"{name} Blackboard")
+        self.blackboard = self.attach_blackboard_client(name=f"MyBlackboard")
+        # self.blackboard.set("proxy_input", "action")
         self.blackboard.register_key("proxy_input", access=py_trees.common.Access.READ)
         self.blackboard.register_key("proxy_output", access=py_trees.common.Access.WRITE)
 
@@ -75,7 +83,7 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
 
     def initialise(self):
         """重置状态"""
-        self.logger.debug(f"{self.name} initialising")
+        self.logger.debug(f"{self.ros_node} initialising")
         self.response = None
         self.current_future = None
 
@@ -85,10 +93,11 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         if self.current_future is None:
             # 准备请求
             request = self.service_type.Request()
+            # self.blackboard.proxy_input = "action"
             if hasattr(self.blackboard, 'proxy_input'):
                 request.input_data = self.blackboard.proxy_input
             
-            self.logger.info(f"Sending request to {self.node_name}")
+            self.logger.info(f"Sending request to {self.ros_node}")
             self.current_future = self.client.call_async(request)
             return py_trees.common.Status.RUNNING
         
@@ -113,7 +122,7 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
 
     def terminate(self, new_status):
         """清理资源"""
-        self.logger.debug(f"{self.name} terminating with status {new_status}")
+        self.logger.debug(f"{self.ros_node} terminating with status {new_status}")
         self.current_future = None
 
     def delay(self, duration):
@@ -174,6 +183,10 @@ class BehaviorTreeBuilder(Node):
             result_setup = self.tree.setup(node=self,service_name="audio_input",timeout=5)
                 
             self.logger.info("Behavior tree started successfully")
+
+            # 4.启动行为树
+            self.tick_tree()
+            
             return True
         except Exception as e:
             self.logger.error(f"Failed to start behavior tree: {str(e)}")
@@ -207,6 +220,9 @@ def main(args=None):
         # 创建行为树构建器
         builder = BehaviorTreeBuilder()
         builder.logger.info("BehaviorTreeBuilder node created")
+        Blackboard = Client(name="MyBlackboard") 
+        Blackboard.register_key("proxy_input", access=py_trees.common.Access.WRITE)
+        Blackboard.set("proxy_input","actioning")
         
         # 启动行为树
         if not builder.start_tree():
@@ -216,7 +232,8 @@ def main(args=None):
             
         # 运行ROS执行器
         builder.logger.info("Entering executor spin loop")
-        builder.executor.spin()
+        # builder.executor.spin()
+        rclpy.spin(builder)
         
     except KeyboardInterrupt:
         builder.logger.warning("Program interrupted by user")
