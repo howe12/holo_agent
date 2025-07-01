@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             "chatllm = llm_model.chatLLM:main",
+            "chatllm_bt = llm_model.chatLLM_bt:main",
         ],
     },
 )
