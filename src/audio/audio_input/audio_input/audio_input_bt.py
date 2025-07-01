@@ -100,6 +100,7 @@ class AudioInput(Node):
             vad_model="fsmn-vad",
             vad_kwargs={"max_single_segment_time": 30000},
             device="cuda:0",
+            disable_update=True
         )
 
         # # 初始化语音识别管道
@@ -127,10 +128,11 @@ class AudioInput(Node):
         """标准化的执行接口"""
         try:
             # 执行实际音频处理逻辑
-            processed_data = self.action_function_listening()
+            processed_data = self.action_srv_listening()
             
             response.success = True
             response.output_data = processed_data
+            self.get_logger().info(f"Audio processing success: {processed_data}")
         except Exception as e:
             self.get_logger().error(f"Audio processing failed: {str(e)}")
             response.success = False
@@ -370,6 +372,47 @@ class AudioInput(Node):
             self.get_logger().info(f"STATE: {msg.data}")
             # 当状态为 "listening" 时，调用 action_function_listening 方法开始监听音频输入
             self.action_function_listening()
+
+    def action_srv_listening(self):
+        """
+        开始监听音频输入，将录制的音频进行语音识别，
+        并将识别结果发布到ROS2话题。
+        """
+        
+        # 调用listen方法录制音频
+        audio_data = self.listen()
+        transcript_text = ""  # 初始化默认值
+
+        if audio_data:
+            # 记录开始转换时间
+            start = time.time()
+            # 记录开始转换日志
+            self.get_logger().info("Local Converting...")
+
+            stt_result = self.model.generate(
+                input=audio_data,
+                cache={},
+                language="zn",  # "zn", "en", "yue", "ja", "ko", "nospeech"
+                use_itn=True,
+                batch_size_s=60,
+                merge_vad=True,  #
+                merge_length_s=15,
+            )
+
+            # 记录结束转换时间
+            end = time.time()
+            # 记录语音识别耗时日志
+            self.get_logger().info(f'paraformer spent: {end - start} s')
+
+            # 获取识别结果文本
+            transcript_text = stt_result[0]["text"]
+            # 记录音频转文本完成日志
+            self.get_logger().info("Audio to text conversion complete!")
+
+            # Step 8: Publish the transcribed text to ROS2
+            if transcript_text == "":  # Empty input
+                self.get_logger().info("Empty input!")
+        return transcript_text
 
     def action_function_listening(self):
         """
