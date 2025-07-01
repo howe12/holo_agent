@@ -23,7 +23,7 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
     """
     修复版：正确的ROS2节点代理行为
     """
-    def __init__(self, name, service_type):
+    def __init__(self, name, service_type,service_name):
         """
         初始化代理行为
         
@@ -33,12 +33,9 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         """
         super().__init__(name=name)
         self.service_type = service_type
+        self.service_name = service_name
 
-        self.subscriptions = []
-        self.publishers = []
-        self.services = []
         self.clients = []  # 然后在 setup 中添加客户端实例
-
         self.client = None
         self.response = None
         self.logger = None
@@ -47,15 +44,14 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         
         # 黑板书设置
         self.blackboard = self.attach_blackboard_client(name=f"MyBlackboard")
-        # self.blackboard.set("proxy_input", "action")
         self.blackboard.register_key("proxy_input", access=py_trees.common.Access.READ)
         self.blackboard.register_key("proxy_output", access=py_trees.common.Access.WRITE)
 
-    def setup(self,service_name, **kwargs,):
+    def setup(self, **kwargs,):
         """
         设置ROS2客户端
         """
-        # 关键修复：获取父节点实例
+        # 1.获取父节点实例
         self.ros_node = kwargs.get('node')  # py_trees_ros自动传递这个参数
         if not self.ros_node:
             self.ros_node = kwargs.get('ros_node')  # 后备方案  
@@ -65,21 +61,17 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         self.logger = self.ros_node.get_logger()
         self.logger.info(f"Setting up proxy for '{self.ros_node}'")
         
-        
-        # 创建服务客户端
+        # 2.创建服务客户端
         self.client = self.ros_node.create_client(
             self.service_type,
-            # f"audio_input"
-            service_name
+            self.service_name
         )
-        
-        # 修复 2: 将客户端添加到框架管理的列表
-        self.clients.append(self.client)  # 关键！py_trees_ros 需要此引用
+        self.clients.append(self.client)  # # 将客户端添加到框架管理的列表,py_trees_ros 需要此引用
 
-        # 等待服务可用
+        # 3.等待服务可用
         if not self.client.wait_for_service(timeout_sec=5.0):
-            self.logger.error(f"Service /audio_input not available")
-        self.logger.info(f"Connected to service /audio_input")
+            self.logger.error(f"Service {str(self.service_name)} not available")
+        self.logger.info(f"Connected to service {str(self.service_name)} ")
 
     def initialise(self):
         """重置状态"""
@@ -93,7 +85,6 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         if self.current_future is None:
             # 准备请求
             request = self.service_type.Request()
-            # self.blackboard.proxy_input = "action"
             if hasattr(self.blackboard, 'proxy_input'):
                 request.input_data = self.blackboard.proxy_input
             
@@ -139,54 +130,58 @@ class BehaviorTreeBuilder(Node):
     """
     def __init__(self):
         super().__init__('behavior_tree_builder')
+
+        # 1.参数初始化
         self.tree = None
         self.logger = self.get_logger()
-        # self.executor = rclpy.executors.SingleThreadedExecutor()
-        # self.executor.add_node(self)
         self.tree_timer = None
 
-    def build_tree(self):
-        """构建行为树结构"""
+    def add_tree_root(self):
+        # 2.建立根节点
         root = py_trees.composites.Sequence(name="LLM BT", memory=True)
-        
-        # 示例：添加音频输入节点代理
-        audio_proxy = ROSProxyBehaviour(
-            name="Audio Input Proxy",
-            service_type=BehavioursTree
-        )
-        root.add_child(audio_proxy)
-        
-        # 示例：添加其他节点...
-        # move_proxy = ROSProxyBehaviour(...)
-        # root.add_child(move_proxy)
-        
-        self.logger.info("Behavior tree structure built")
-        return root
 
-    def start_tree(self):
-        """启动行为树"""
+        # 3.建立子节点
         try:
-            # 1.构建行为树架构
-            root = self.build_tree()
+            # 3.1 语音识别客户端           
+            root = self.add_child_tree(root,"Audio Input Proxy","audio_input")
+            # 3.2 llm调用客户端
+            root = self.add_child_tree(root,"LLM Input Proxy","llm_input")
             if not root:
                 self.logger.error("Failed to build behavior tree root")
                 return False
                 
-            # 2.创建行为树实例
+            # 创建行为树实例
             self.tree = py_trees_ros.trees.BehaviourTree(
                 root=root,
                 unicode_tree_debug=True
             )
+        except Exception as e:
+            self.logger.error(f"Failed to start behavior tree: {str(e)}")
+            return False
+        return root
 
-            # 3.初始化行为树
+
+    def add_child_tree(self,root_node,node_name,service_name):
+        """建立树子节点"""
+        root = root_node
+        child_node = ROSProxyBehaviour(
+            name=node_name,
+            service_type=BehavioursTree,
+            service_name=service_name
+        )
+        root.add_child(child_node)
+             
+        self.logger.info(f"Child node {str(node_name)} build")
+        return root
+
+    def setup_tree(self):
+        """配置行为树"""
+        try:
+            # 初始化行为树
             self.logger.info(f"开始初始化行为树")
-            result_setup = self.tree.setup(node=self,service_name="audio_input",timeout=5)
+            result_setup = self.tree.setup(node=self,timeout=5)
                 
-            self.logger.info("Behavior tree started successfully")
-
-            # 4.启动行为树
-            self.tick_tree()
-            
+            self.logger.info("Behavior tree setup successfully")
             return True
         except Exception as e:
             self.logger.error(f"Failed to start behavior tree: {str(e)}")
@@ -195,7 +190,8 @@ class BehaviorTreeBuilder(Node):
     def tick_tree(self):
         """执行行为树tick"""
         try:
-            self.tree.tick()
+            # self.tree.tick()
+            self.tree.tick_tock(period_ms=10000)
         except Exception as e:
             self.logger.error(f"Error during tree tick: {str(e)}")
 
@@ -217,22 +213,27 @@ def main(args=None):
     rclpy.init(args=args)
     
     try:
-        # 创建行为树构建器
+        # 1.创建行为树构建器
         builder = BehaviorTreeBuilder()
+        root = builder.add_tree_root()
         builder.logger.info("BehaviorTreeBuilder node created")
+
+        # 2.创建黑板
         Blackboard = Client(name="MyBlackboard") 
         Blackboard.register_key("proxy_input", access=py_trees.common.Access.WRITE)
         Blackboard.set("proxy_input","actioning")
         
-        # 启动行为树
-        if not builder.start_tree():
+        # 3.配置行为树
+        if not builder.setup_tree():
             builder.logger.error("Exiting due to startup failure")
             builder.shutdown()
-            return 1
+            return 0
+
+        # 4.执行行为树
+        builder.tick_tree()
             
         # 运行ROS执行器
         builder.logger.info("Entering executor spin loop")
-        # builder.executor.spin()
         rclpy.spin(builder)
         
     except KeyboardInterrupt:
