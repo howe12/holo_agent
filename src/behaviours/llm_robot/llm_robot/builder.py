@@ -23,7 +23,7 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
     """
     修复版：正确的ROS2节点代理行为
     """
-    def __init__(self, name, service_type,service_name):
+    def __init__(self, name, service_type,service_name,RB,WB):
         """
         初始化代理行为
         
@@ -41,11 +41,23 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         self.logger = None
         self.ros_node = None
         self.current_future = None
+        self.RB = RB
+        self.WB = WB
         
         # 黑板书设置
         self.blackboard = self.attach_blackboard_client(name=f"MyBlackboard")
-        self.blackboard.register_key("proxy_input", access=py_trees.common.Access.READ)
-        self.blackboard.register_key("proxy_output", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key(self.RB, access=py_trees.common.Access.READ)
+        self.blackboard.register_key(self.WB, access=py_trees.common.Access.WRITE)
+
+        #  在 self 上创建动态属性
+        # 读属性 (RB)
+        # setattr(ROSProxyBehaviour, self.RB , 
+        #         property(fget=lambda self: getattr(self.blackboard, self.RB )))
+        
+        # # 写属性 (WB)
+        # setattr(ROSProxyBehaviour, self.WB , 
+        #         property(fget=lambda self: getattr(self.blackboard, self.WB ),
+        #                  fset=lambda self, value: setattr(self.blackboard, self.WB , value)))
 
     def setup(self, **kwargs,):
         """
@@ -85,8 +97,9 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         if self.current_future is None:
             # 准备请求
             request = self.service_type.Request()
-            if hasattr(self.blackboard, 'proxy_input'):
-                request.input_data = self.blackboard.proxy_input
+            # if hasattr(self.blackboard, 'proxy_input'):
+                # request.input_data = self.blackboard.proxy_input
+            request.input_data = getattr(self.blackboard, self.RB, None)
             
             self.logger.info(f"Sending request to {self.ros_node}")
             self.current_future = self.client.call_async(request)
@@ -99,7 +112,10 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
                 
                 if self.response.success:
                     self.logger.info(f"Service call succeeded")
-                    self.blackboard.proxy_output = self.response.output_data
+                    self.logger.info(f"response.output_data:\n {self.response.output_data}")
+                    # self.blackboard.proxy_output = self.response.output_data
+                    setattr(self.blackboard, self.WB, self.response.output_data)
+                    self.logger.info(f"{self.blackboard}")
                     return py_trees.common.Status.SUCCESS
                 else:
                     self.logger.warning(f"Service call failed: {self.response.message}")
@@ -143,9 +159,11 @@ class BehaviorTreeBuilder(Node):
         # 3.建立子节点
         try:
             # 3.1 语音识别客户端           
-            root = self.add_child_tree(root,"Audio Input Proxy","audio_input")
+            root = self.add_child_tree(root,"Audio Input Proxy","audio_input","proxy_input","llm_input")
             # 3.2 llm调用客户端
-            root = self.add_child_tree(root,"LLM Input Proxy","llm_input")
+            root = self.add_child_tree(root,"LLM Input Proxy","llm_input","llm_input","llm_output")
+            # 3.3 语音合成客户端
+            root = self.add_child_tree(root,"Audio Output Proxy","audio_output","llm_output","audio_output")
             if not root:
                 self.logger.error("Failed to build behavior tree root")
                 return False
@@ -161,13 +179,15 @@ class BehaviorTreeBuilder(Node):
         return root
 
 
-    def add_child_tree(self,root_node,node_name,service_name):
+    def add_child_tree(self,root_node,node_name,service_name,RB,WB):
         """建立树子节点"""
         root = root_node
         child_node = ROSProxyBehaviour(
             name=node_name,
             service_type=BehavioursTree,
-            service_name=service_name
+            service_name=service_name,
+            RB=RB,
+            WB=WB
         )
         root.add_child(child_node)
              
@@ -191,7 +211,7 @@ class BehaviorTreeBuilder(Node):
         """执行行为树tick"""
         try:
             # self.tree.tick()
-            self.tree.tick_tock(period_ms=10000)
+            self.tree.tick_tock(period_ms=1000)
         except Exception as e:
             self.logger.error(f"Error during tree tick: {str(e)}")
 
