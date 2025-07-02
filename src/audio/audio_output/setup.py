@@ -13,7 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/resource', glob('resource/*')),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools',"llm_config", "llm_interfaces"],
     zip_safe=True,
     maintainer='leo',
     maintainer_email='10360882+huo-haijie@user.noreply.gitee.com',
@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             "audio_output_local = audio_output.audio_output_local:main",
+            "audio_output_bt = audio_output.audio_output_bt:main",
         ],
     },
 )
