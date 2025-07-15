@@ -183,6 +183,41 @@ class ChatLLMNode(Node):
             self.get_logger().error(f"Error writing chat history to JSON: {error}")
             return False
 
+    def handle_dify_stream_response(self,response):
+        full_text = ""  # 累积完整回复
+        metadata = None  # 存储元数据
+        
+        if response.status_code == 200:
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8').strip()
+                    # 仅处理有效事件行
+                    if decoded_line.startswith('data:'):
+                        try:
+                            event_data = json.loads(decoded_line[5:])  # 移除"data:"前缀
+                            event_type = event_data.get("event")
+                            
+                            # 处理文本分块
+                            if event_type == "message":
+                                chunk = event_data.get("answer", "")
+                                full_text += chunk
+                                # 实时输出效果（可选）
+                                self.get_logger().info(f"收到分块: {chunk}")
+                            
+                            # 捕获结束事件及元数据
+                            elif event_type == "message_end":
+                                metadata = event_data.get("metadata", {})
+                                self.get_logger().info(f"最终元数据: {metadata}")
+                        
+                        except json.JSONDecodeError:
+                            self.get_logger().error(f"JSON解析失败: {decoded_line}")
+        
+        # 返回完整结果
+        return {
+            "content": full_text,
+            "metadata": metadata
+        }
+
     def generate_llm_response(self, messages_input):
         """
         根据提供的输入消息生成ChatLLM的响应。
@@ -227,17 +262,41 @@ class ChatLLMNode(Node):
         # --------------------------------------------------------------
         # 调用局域网ollama服务 qwen3:4b模型
 
-        url = "http://192.168.100.244:11434/api/generate"
+        # url = "http://192.168.100.244:11434/api/generate"
+        # data = {
+        #     "model": "qwen3:4b",
+        #     "prompt": str(messages_input),
+        #     "think": False,  # 关键参数：关闭深度思考
+        #     "stream": False  # 关闭流式响应以获取完整结果
+        # }
+
+        # response = requests.post(url, json=data)
+        # result = response.json()["response"]
+        # self.get_logger().info(f"\033[32m 从qwen3:4b得到回复: \n{result}\033[0m")
+        # --------------------------------------------------------------
+        # 调用dify服务
+        
+        url = "http://192.168.100.244/v1/chat-messages" 
+        headers = {
+            # "Authorization": "Bearer app-H17Brmyq2zCaOo1UrCGijOYI",  # 产品说明小助手
+            "Authorization": "Bearer app-paULCxxuHjriA97Z2zv9LZEw",  # AI MCP
+            "Content-Type": "application/json"  
+        }
         data = {
-            "model": "qwen3:4b",
-            "prompt": str(messages_input),
-            "think": False,  # 关键参数：关闭深度思考
-            "stream": False  # 关闭流式响应以获取完整结果
+            "inputs": {},
+            "query": str(messages_input),
+            "response_mode":"streaming",
+            "user":"leo",
         }
 
-        response = requests.post(url, json=data)
-        result = response.json()["response"]
-        self.get_logger().info(f"\033[32m 从qwen3:4b得到回复: \n{result}\033[0m")
+        response = requests.post(url, headers=headers,json=data,stream=True)
+        # result = response.json()["answer"]
+        # 针对streaming格式处理
+        result = self.handle_dify_stream_response(response)
+        self.get_logger().info(f"\033[32m完整回复: {result['content']}\033[0m")
+        self.get_logger().info(f"知识库引用: {result['metadata'].get('retriever_resources', [])}")
+
+        # self.get_logger().info(f"\033[32m 从dify得到回复: \n{result}\033[0m")
         # --------------------------------------------------------------
 
 
@@ -271,7 +330,8 @@ class ChatLLMNode(Node):
         #################################################  
         # 从响应中获取消息内容
         # chunk = llm_response.output.choices[0]['message']['content']
-        chunk = llm_response.json()["response"]
+        # chunk = llm_response.json()["response"] # ollama
+        chunk = llm_response.json()["answer"] # ollama
         # 初始化消息文本，默认为None
         content = None
         # 初始化函数调用信息，默认为None
@@ -483,45 +543,50 @@ class ChatLLMNode(Node):
         llm_callback函数在ChatLLM服务被调用时触发。
         该函数是ChatLLM节点的主要功能,用于处理输入消息并生成LLM响应。
         """
-        # 1. 显示收到的输入消息
-        self.get_logger().info(f"\033[32m 收到的输入消息: {request.input_data}\033[0m")
+        try:
+            # 1. 显示收到的输入消息
+            self.get_logger().info(f"\033[32m 收到的输入消息: {request.input_data}\033[0m")
 
-        # 2. 将用户消息添加到聊天历史记录中,根据对话历史生成聊天回复
-        user_prompt = "/nothink" + request.input_data
-        self.add_message_to_history("user", user_prompt)
+            # 2. 将用户消息添加到聊天历史记录中,根据对话历史生成聊天回复
+            user_prompt = "/nothink" + request.input_data
+            self.add_message_to_history("user", user_prompt)
 
-        # 3. 生成LLM响应
-        llm_response = self.generate_llm_response(config.chat_history)
+            # 3. 生成LLM响应
+            llm_response = self.generate_llm_response(config.chat_history)
 
-        if llm_response: # 检查是否生成了响应
-            # 4. 提取响应的相关信息 (文本、函数调用、函数标志)
-            text, function_call, function_flag = self.get_response_information(llm_response)
+            if llm_response: # 检查是否生成了响应
+                # 4. 提取响应的相关信息 (文本、函数调用、函数标志)
+                text, function_call, function_flag = self.get_response_information(llm_response)
 
-            # 5. 将LLM的回复添加到聊天历史记录中,写入到JSON文件
-            self.add_message_to_history(role="assistant", content=text if function_flag == 0 else str(function_call))
-            self.write_chat_history_to_json()
-            self.get_logger().info(f"\033[36m 状态: 输出处理中\033[0m") # 显示状态: 输出处理中
+                # 5. 将LLM的回复添加到聊天历史记录中,写入到JSON文件
+                self.add_message_to_history(role="assistant", content=text if function_flag == 0 else str(function_call))
+                self.write_chat_history_to_json()
+                self.get_logger().info(f"\033[36m 状态: 输出处理中\033[0m") # 显示状态: 输出处理中
 
-            # 6. 如果存在函数调用
-            if function_flag == 1:
-                # 6.1 执行机器人函数调用
-                self.function_call(function_call)
-                self.get_logger().info(f"\033[36m 状态: 函数执行中\033[0m")
-            
-            # 7. 如果只是文本响应
-            else:
-                # 记录状态: 用户反馈
-                # self.publish_string(text, self.llm_feedback_publisher)  # 发布LLM反馈内容
-                # self.publish_string(text, self.output_publisher)        # 发布语音播放内容
-                self.get_logger().info(f"\033[36m 状态: 对话模式\033[0m")
-                response.success = True
-                response.output_data = text
-                self.get_logger().info(f"LLM processing success: {text}")
-                return response
+                # 6. 如果存在函数调用
+                if function_flag == 1:
+                    # 6.1 执行机器人函数调用
+                    self.function_call(function_call)
+                    self.get_logger().info(f"\033[36m 状态: 函数执行中\033[0m")
                 
-        else:
-            # 如果没有生成响应，则从聊天历史中移除最后一条消息
-            config.chat_history.pop()
+                # 7. 如果只是文本响应
+                else:
+                    # 记录状态: 用户反馈
+                    # self.publish_string(text, self.llm_feedback_publisher)  # 发布LLM反馈内容
+                    # self.publish_string(text, self.output_publisher)        # 发布语音播放内容
+                    self.get_logger().info(f"\033[36m 状态: 对话模式\033[0m")
+                    response.success = True
+                    response.output_data = text
+                    self.get_logger().info(f"LLM processing success: {text}")
+                    return response
+                    
+            else:
+                # 如果没有生成响应，则从聊天历史中移除最后一条消息
+                config.chat_history.pop()
+        except Exception as e:
+            self.get_logger().error(f"Service call exception: {str(e)}")
+            response.success = False
+            return response
 
     def llm_callback(self, msg):
         """
