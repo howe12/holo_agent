@@ -190,7 +190,10 @@ class ChatLLMNode(Node):
         if response.status_code == 200:
             for line in response.iter_lines():
                 if line:
-                    decoded_line = line.decode('utf-8').strip()
+                    # 输出原始数据
+                    self.get_logger().info(f"原始数据: {line}")
+                    decoded_line = line.decode('utf-8').strip() # 解码并移除首尾空格
+                    
                     # 仅处理有效事件行
                     if decoded_line.startswith('data:'):
                         try:
@@ -198,7 +201,7 @@ class ChatLLMNode(Node):
                             event_type = event_data.get("event")
                             
                             # 处理文本分块
-                            if event_type == "message":
+                            if event_type == "agent_message":
                                 chunk = event_data.get("answer", "")
                                 full_text += chunk
                                 # 实时输出效果（可选）
@@ -211,7 +214,10 @@ class ChatLLMNode(Node):
                         
                         except json.JSONDecodeError:
                             self.get_logger().error(f"JSON解析失败: {decoded_line}")
-        
+        else:
+            self.get_logger().error(f"请求失败，状态码: {response.status_code}")
+            return False
+
         # 返回完整结果
         return {
             "content": full_text,
@@ -290,11 +296,19 @@ class ChatLLMNode(Node):
         }
 
         response = requests.post(url, headers=headers,json=data,stream=True)
-        # result = response.json()["answer"]
+        
         # 针对streaming格式处理
         result = self.handle_dify_stream_response(response)
+        # self.get_logger().info(f"dify回复状态码: {result['status_code']}")
         self.get_logger().info(f"\033[32m完整回复: {result['content']}\033[0m")
         self.get_logger().info(f"知识库引用: {result['metadata'].get('retriever_resources', [])}")
+
+        if result:
+            self.get_logger().info(f"\033[36m Qwen响应 : \n{result['content']}\033[0m")
+            return result['content']
+        else:
+            return None
+
 
         # self.get_logger().info(f"\033[32m 从dify得到回复: \n{result}\033[0m")
         # --------------------------------------------------------------
@@ -302,18 +316,18 @@ class ChatLLMNode(Node):
 
         # 记录日志，检查响应的状态
         # if response.status_code == HTTPStatus.OK:
-        if response.status_code == 200:
-            # 如果响应成功，记录响应内容
-            # self.get_logger().info(f"Qwen响应: \n{response}")
-            self.get_logger().info(f"\033[36m Qwen响应 : \n{response}\033[0m")
-            return response
-        else:
-            # 如果响应失败，记录错误信息
-            self.get_logger().error('请求ID: %s, 状态码: %s, 错误码: %s, 错误消息: %s' % (
-                # response.request_id, response.status_code,
-                # response.code, response.message
-            ))
-            return None
+
+        # if response.status_code == 200:
+        #     # 如果响应成功，记录响应内容
+        #     self.get_logger().info(f"\033[36m Qwen响应 : \n{response}\033[0m")
+        #     return response
+        # else:
+        #     # 如果响应失败，记录错误信息
+        #     self.get_logger().error('请求ID: %s, 状态码: %s, 错误码: %s, 错误消息: %s' % (
+        #         # response.request_id, response.status_code,
+        #         # response.code, response.message
+        #     ))
+        #     return None
 
     def get_response_information(self, llm_response):
         """
@@ -331,7 +345,8 @@ class ChatLLMNode(Node):
         # 从响应中获取消息内容
         # chunk = llm_response.output.choices[0]['message']['content']
         # chunk = llm_response.json()["response"] # ollama
-        chunk = llm_response.json()["answer"] # ollama
+        # chunk = llm_response.json()["answer"] # ollama
+        chunk = llm_response # dify
         # 初始化消息文本，默认为None
         content = None
         # 初始化函数调用信息，默认为None
