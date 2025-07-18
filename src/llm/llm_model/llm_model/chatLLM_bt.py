@@ -280,6 +280,28 @@ class ChatLLMNode(Node):
         # result = response.json()["response"]
         # self.get_logger().info(f"\033[32m 从qwen3:4b得到回复: \n{result}\033[0m")
         # --------------------------------------------------------------
+        # 上传图片
+        photo_path = '/home/leo/Pictures/lena.png'  # 确保路径正确
+
+        url = "http://192.168.100.244/v1/files/upload"
+        headers = {
+            "Authorization": "Bearer app-paULCxxuHjriA97Z2zv9LZEw"  # 认证信息
+        }
+        # 1. 以二进制模式打开文件，并指定 MIME 类型
+        with open(photo_path, 'rb') as file:
+            # 2. 构建 files 字典：键名必须为 'file'，值包含（文件名, 文件对象, MIME类型）
+            files = {'file': ('image', file, 'image/png')}  # MIME 类型需匹配文件格式[4,6](@ref)
+            
+            # 3. 非文件参数（如 user）通过 data 传递
+            data = {'user': 'leo'}
+            
+            # 4. 发送 POST 请求（移除 json 和 stream 参数）
+            response = requests.post(url, headers=headers, files=files, data=data)
+
+        photo_id = response.json()["id"]
+        self.get_logger().info(f"图片上传id: {photo_id}")
+
+        
         # 调用dify服务
         
         url = "http://192.168.100.244/v1/chat-messages" 
@@ -293,6 +315,15 @@ class ChatLLMNode(Node):
             "query": str(messages_input),
             "response_mode":"streaming",
             "user":"leo",
+            "files":[
+                {
+                    "type": "image",
+                    "transfer_method": "local_file",
+                    "upload_file_id": photo_id,
+                    # "transfer_method": "remote_url",
+                    # "url": photo_path,
+                }
+            ]
         }
 
         response = requests.post(url, headers=headers,json=data,stream=True)

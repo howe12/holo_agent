@@ -159,11 +159,11 @@ class BehaviorTreeBuilder(Node):
         # 3.建立子节点
         try:
             # 3.1 语音识别客户端           
-            root = self.add_child_tree(root,"Audio Input Proxy","audio_input","proxy_input","llm_input")
+            root = self.add_child_tree(root,"Audio Input Proxy",BehavioursTree,"audio_input","proxy_input","llm_input")
             # 3.2 llm调用客户端
-            root = self.add_child_tree(root,"LLM Input Proxy","llm_input","llm_input","llm_output")
+            root = self.add_child_tree(root,"LLM Input Proxy",BehavioursTree,"llm_input","llm_input","llm_output")
             # 3.3 语音合成客户端
-            root = self.add_child_tree(root,"Audio Output Proxy","audio_output","llm_output","audio_output")
+            root = self.add_child_tree(root,"Audio Output Proxy",BehavioursTree,"audio_output","llm_output","audio_output")
             if not root:
                 self.logger.error("Failed to build behavior tree root")
                 return False
@@ -179,12 +179,12 @@ class BehaviorTreeBuilder(Node):
         return root
 
 
-    def add_child_tree(self,root_node,node_name,service_name,RB,WB):
+    def add_child_tree(self,root_node,node_name,service_type,service_name,RB,WB):
         """建立树子节点"""
         root = root_node
         child_node = ROSProxyBehaviour(
             name=node_name,
-            service_type=BehavioursTree,
+            service_type=service_type,
             service_name=service_name,
             RB=RB,
             WB=WB
