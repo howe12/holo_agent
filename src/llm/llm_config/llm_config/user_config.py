@@ -77,7 +77,7 @@ class UserConfig:
         # [optional]: The prompt given to the AI, provided by the user
         self.user_prompt = ""
         # [optional]: The generated prompt by the administrator, used as a prefix for the AI's response
-        self.system_prompt = self.load_resource_file("llm_config", "llm_prompt.md")
+        self.system_prompt = self.load_resource_file("llm_config", "llm_prompt_simple.md")
         # [optional]: The generated response provided by the AI
         self.assistant_response = ""
 

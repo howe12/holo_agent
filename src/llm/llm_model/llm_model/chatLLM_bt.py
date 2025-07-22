@@ -201,10 +201,21 @@ class ChatLLMNode(Node):
                             event_type = event_data.get("event")
                             
                             # 处理文本分块
-                            if event_type == "agent_message":
+                            if event_type == "message":
                                 chunk = event_data.get("answer", "")
                                 full_text += chunk
                                 # 实时输出效果（可选）
+                                self.get_logger().info(f"收到分块: {chunk}")
+                            elif event_type == "workflow_finished":
+                                top_data = event_data.get("data", {})
+                                output = top_data.get("outputs", {})
+                                chunk = output.get("answer", "")
+                                full_text += chunk
+                                # 实时输出效果（可选）
+                                self.get_logger().info(f"收到分块: {chunk}")
+                            elif event_type == "agent_message":
+                                chunk = event_data.get("answer", "")
+                                full_text += chunk
                                 self.get_logger().info(f"收到分块: {chunk}")
                             
                             # 捕获结束事件及元数据
@@ -223,6 +234,31 @@ class ChatLLMNode(Node):
             "content": full_text,
             "metadata": metadata
         }
+
+    def upload_photo(self,photo_path,dify_key):
+        """
+        上传照片到dify服务
+        """
+        url = "http://192.168.100.244/v1/files/upload"
+        headers = {
+            "Authorization": dify_key  # 认证信息
+        }
+        # 1. 以二进制模式打开文件，并指定 MIME 类型
+        with open(photo_path, 'rb') as file:
+            # 2. 构建 files 字典：键名必须为 'file'，值包含（文件名, 文件对象, MIME类型）
+            files = {'file': ('image', file, 'image/png')}  # MIME 类型需匹配文件格式[4,6](@ref)
+            
+            # 3. 非文件参数（如 user）通过 data 传递
+            data = {'user': 'leo'}
+            
+            # 4. 发送 POST 请求（移除 json 和 stream 参数）
+            response = requests.post(url, headers=headers, files=files, data=data)
+
+        photo_id = response.json()["id"]
+        self.get_logger().info(f"图片上传id: {photo_id}")
+
+        return photo_id
+
 
     def generate_llm_response(self, messages_input):
         """
@@ -280,34 +316,12 @@ class ChatLLMNode(Node):
         # result = response.json()["response"]
         # self.get_logger().info(f"\033[32m 从qwen3:4b得到回复: \n{result}\033[0m")
         # --------------------------------------------------------------
-        # 上传图片
-        photo_path = '/home/leo/Pictures/lena.png'  # 确保路径正确
-
-        url = "http://192.168.100.244/v1/files/upload"
-        headers = {
-            "Authorization": "Bearer app-paULCxxuHjriA97Z2zv9LZEw"  # 认证信息
-        }
-        # 1. 以二进制模式打开文件，并指定 MIME 类型
-        with open(photo_path, 'rb') as file:
-            # 2. 构建 files 字典：键名必须为 'file'，值包含（文件名, 文件对象, MIME类型）
-            files = {'file': ('image', file, 'image/png')}  # MIME 类型需匹配文件格式[4,6](@ref)
-            
-            # 3. 非文件参数（如 user）通过 data 传递
-            data = {'user': 'leo'}
-            
-            # 4. 发送 POST 请求（移除 json 和 stream 参数）
-            response = requests.post(url, headers=headers, files=files, data=data)
-
-        photo_id = response.json()["id"]
-        self.get_logger().info(f"图片上传id: {photo_id}")
-
         
-        # 调用dify服务
-        
-        url = "http://192.168.100.244/v1/chat-messages" 
+        # 调用dify服务-思维链服务
+        dify_key = "Bearer app-in7itSS6MVPXDpZNTzHQeT5j"  
+        url = "http://192.168.100.244/v1/chat-messages" # 思维链
         headers = {
-            # "Authorization": "Bearer app-H17Brmyq2zCaOo1UrCGijOYI",  # 产品说明小助手
-            "Authorization": "Bearer app-paULCxxuHjriA97Z2zv9LZEw",  # AI MCP
+            "Authorization": dify_key,  # AI MCP
             "Content-Type": "application/json"  
         }
         data = {
@@ -315,22 +329,13 @@ class ChatLLMNode(Node):
             "query": str(messages_input),
             "response_mode":"streaming",
             "user":"leo",
-            "files":[
-                {
-                    "type": "image",
-                    "transfer_method": "local_file",
-                    "upload_file_id": photo_id,
-                    # "transfer_method": "remote_url",
-                    # "url": photo_path,
-                }
-            ]
         }
 
+        # 请求dify服务
         response = requests.post(url, headers=headers,json=data,stream=True)
         
         # 针对streaming格式处理
         result = self.handle_dify_stream_response(response)
-        # self.get_logger().info(f"dify回复状态码: {result['status_code']}")
         self.get_logger().info(f"\033[32m完整回复: {result['content']}\033[0m")
         self.get_logger().info(f"知识库引用: {result['metadata'].get('retriever_resources', [])}")
 
@@ -341,9 +346,82 @@ class ChatLLMNode(Node):
             return None
 
 
-        # self.get_logger().info(f"\033[32m 从dify得到回复: \n{result}\033[0m")
         # --------------------------------------------------------------
 
+        # 上传图片
+    #     photo_path = '/home/leo/Pictures/lena.png'  # 确保路径正确
+    #     # dify_key = "Bearer app-paULCxxuHjriA97Z2zv9LZEw" # AGENT
+    #     dify_key = "Bearer app-np6GXrCTILDEf1In7i31YBJD" # VLM助手 对话服务
+
+    #     photo_id = self.upload_photo(photo_path,dify_key)
+
+    #    # 调用dify服务-对话服务
+    #     url = "http://192.168.100.244/v1/chat-messages" 
+    #     headers = {
+    #         "Authorization": dify_key,  # AI MCP
+    #         "Content-Type": "application/json"  
+    #     }
+    #     data = {
+    #         "inputs": {},
+    #         "query": str(messages_input),
+    #         "response_mode":"blocking",
+    #         "user":"leo",
+    #         "files":[
+    #             {
+    #                 "type": "image",
+    #                 "transfer_method": "local_file",
+    #                 "upload_file_id": photo_id,
+    #             }
+    #         ]
+    #     }
+    #     # 请求dify服务
+    #     response = requests.post(url, headers=headers,json=data)
+    #     result = response.json()["answer"]
+    #     if result:
+    #         self.get_logger().info(f"\033[32m 从VLM助手得到回复: \n{result}\033[0m")
+    #         return result
+    #     else:
+    #         return None
+
+        # --------------------------------------------------------------
+
+        # 调用dify服务-agent服务
+        # url = "http://192.168.100.244/v1/chat-messages" 
+        # headers = {
+        #     "Authorization": dify_key,  # AI MCP
+        #     "Content-Type": "application/json"  
+        # }
+        # data = {
+        #     "inputs": {},
+        #     "query": str(messages_input),
+        #     "response_mode":"streaming",
+        #     "user":"leo",
+        #     "files":[
+        #         {
+        #             "type": "image",
+        #             "transfer_method": "local_file",
+        #             "upload_file_id": photo_id,
+        #             # "transfer_method": "remote_url",
+        #             # "url": photo_path,
+        #         }
+        #     ]
+        # }
+
+        # # 请求dify服务
+        # response = requests.post(url, headers=headers,json=data,stream=True)
+        
+        # # 针对streaming格式处理
+        # result = self.handle_dify_stream_response(response)
+        # self.get_logger().info(f"\033[32m完整回复: {result['content']}\033[0m")
+        # self.get_logger().info(f"知识库引用: {result['metadata'].get('retriever_resources', [])}")
+
+        # if result:
+        #     self.get_logger().info(f"\033[36m Qwen响应 : \n{result['content']}\033[0m")
+        #     return result['content']
+        # else:
+        #     return None
+
+        # --------------------------------------------------------------
 
         # 记录日志，检查响应的状态
         # if response.status_code == HTTPStatus.OK:
@@ -594,7 +672,7 @@ class ChatLLMNode(Node):
             self.get_logger().info(f"\033[32m 收到的输入消息: {request.input_data}\033[0m")
 
             # 2. 将用户消息添加到聊天历史记录中,根据对话历史生成聊天回复
-            user_prompt = "/nothink" + request.input_data
+            user_prompt = request.input_data
             self.add_message_to_history("user", user_prompt)
 
             # 3. 生成LLM响应
