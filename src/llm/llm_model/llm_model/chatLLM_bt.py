@@ -199,29 +199,27 @@ class ChatLLMNode(Node):
                         try:
                             event_data = json.loads(decoded_line[5:])  # 移除"data:"前缀
                             event_type = event_data.get("event")
-                            
+                          
                             # 处理文本分块
                             if event_type == "message":
                                 chunk = event_data.get("answer", "")
                                 full_text += chunk
-                                # 实时输出效果（可选）
-                                self.get_logger().info(f"收到分块: {chunk}")
-                            elif event_type == "workflow_finished":
-                                top_data = event_data.get("data", {})
-                                output = top_data.get("outputs", {})
-                                chunk = output.get("answer", "")
-                                full_text += chunk
-                                # 实时输出效果（可选）
-                                self.get_logger().info(f"收到分块: {chunk}")
+                                # self.get_logger().info(f"收到分块: {chunk}")
+                            # elif event_type == "workflow_finished":
+                            #     top_data = event_data.get("data", {})
+                            #     output = top_data.get("outputs", {})
+                            #     chunk = output.get("answer", "")
+                            #     full_text += chunk
+                                # self.get_logger().info(f"收到分块: {chunk}")
                             elif event_type == "agent_message":
                                 chunk = event_data.get("answer", "")
                                 full_text += chunk
-                                self.get_logger().info(f"收到分块: {chunk}")
+                                # self.get_logger().info(f"收到分块: {chunk}")
                             
                             # 捕获结束事件及元数据
-                            elif event_type == "message_end":
-                                metadata = event_data.get("metadata", {})
-                                self.get_logger().info(f"最终元数据: {metadata}")
+                            # elif event_type == "message_end":
+                            #     metadata = event_data.get("metadata", {})
+                            #     self.get_logger().info(f"最终元数据: {metadata}")
                         
                         except json.JSONDecodeError:
                             self.get_logger().error(f"JSON解析失败: {decoded_line}")
@@ -232,7 +230,7 @@ class ChatLLMNode(Node):
         # 返回完整结果
         return {
             "content": full_text,
-            "metadata": metadata
+            # "metadata": metadata
         }
 
     def upload_photo(self,photo_path,dify_key):
@@ -336,11 +334,11 @@ class ChatLLMNode(Node):
         
         # 针对streaming格式处理
         result = self.handle_dify_stream_response(response)
-        self.get_logger().info(f"\033[32m完整回复: {result['content']}\033[0m")
-        self.get_logger().info(f"知识库引用: {result['metadata'].get('retriever_resources', [])}")
+        # self.get_logger().info(f"\033[32m完整回复: {result['content']}\033[0m")
+        # self.get_logger().info(f"知识库引用: {result['metadata'].get('retriever_resources', [])}")
 
         if result:
-            self.get_logger().info(f"\033[36m Qwen响应 : \n{result['content']}\033[0m")
+            # self.get_logger().info(f"\033[36m Qwen响应 : \n{result['content']}\033[0m")
             return result['content']
         else:
             return None
@@ -763,3 +761,4 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+
