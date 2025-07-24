@@ -159,7 +159,7 @@ class ChatLLMNode(Node):
         从ChatLLM的响应中提取响应信息。
         return:
         response_type: 响应类型
-        response_content: 响应内容
+        response_data: 响应内容
         response_description: 响应描述
         ''' 
 
@@ -187,7 +187,20 @@ class ChatLLMNode(Node):
         except (KeyError, json.JSONDecodeError) as e:
             self.get_logger().error(f"响应解析失败: {str(e)}")
 
-        return response_type, response_content, response_description
+        return response_type, response_data, response_description
+
+    def handle_task_list(self,task_list):
+        '''
+        处理任务列表
+        '''
+        server_name = None ; server_type = None ; server_parameters = None
+        self.get_logger().info(f"📝开始发布任务列表")
+        for task in task_list:
+            server_name = task["server_name"]
+            server_type = task["server_type"]
+            server_parameters = task["server_parameters"]
+            
+            # self.get_logger().info(f"任务: {server_name} {server_type} {server_parameters}")
 
     def llm_srv_callback(self, request, response):
         '''
@@ -206,7 +219,7 @@ class ChatLLMNode(Node):
 
             if llm_response: # 检查是否生成了响应
                 # 4. 提取响应的相关信息 (响应类型、响应内容、响应描述)
-                response_type, response_content, response_description = self.get_response_classification(llm_response)
+                response_type, response_data, response_description = self.get_response_classification(llm_response)
                 # 5. 根据响应类型分类处理
                 if response_type == "info":
                     # self.handle_info(response_content)
@@ -214,10 +227,11 @@ class ChatLLMNode(Node):
                 elif response_type == "demo":
                     self.get_logger().info(f"DEMO执行: {response_description}...")
                 elif response_type == "task_list":
-                    # self.handle_task_list(response_content)
+                    self.handle_task_list(response_data)
                     self.get_logger().info(f"TASK LIST: {response_description}...")
                 else:
                     self.get_logger().error(f"未知响应类型: {response_type}")
+                
                 # 返回响应
                 response.success = True
                 response.output_data = str(response_description)
