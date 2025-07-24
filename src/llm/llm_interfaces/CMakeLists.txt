@@ -19,6 +19,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ChatLLM.msg"
   "srv/ChatLLM.srv"
+  "srv/ChildTree.srv"
   "srv/MoveJoint.srv"
   "srv/MoveCartesian.srv"
   "srv/RelativeMove.srv"

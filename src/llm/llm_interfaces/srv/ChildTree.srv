@@ -1,0 +1,8 @@
+# 请求
+string server_type
+string server_name
+string server_parameters
+---
+# 响应
+bool success
+string output_data
