@@ -236,6 +236,80 @@ class ChatLLMNode(Node):
         result = response.json()["response"]
         self.get_logger().info(f"\033[32m 从qwen3:4b得到回复: \n{result}\033[0m")
         # --------------------------------------------------------------
+        # 上传图片
+    #     photo_path = '/home/leo/Pictures/lena.png'  # 确保路径正确
+    #     # dify_key = "Bearer app-paULCxxuHjriA97Z2zv9LZEw" # AGENT
+    #     dify_key = "Bearer app-np6GXrCTILDEf1In7i31YBJD" # VLM助手 对话服务
+
+    #     photo_id = self.upload_photo(photo_path,dify_key)
+
+    #    # 调用dify服务-对话服务
+    #     url = "http://192.168.100.244/v1/chat-messages" 
+    #     headers = {
+    #         "Authorization": dify_key,  # AI MCP
+    #         "Content-Type": "application/json"  
+    #     }
+    #     data = {
+    #         "inputs": {},
+    #         "query": str(messages_input),
+    #         "response_mode":"blocking",
+    #         "user":"leo",
+    #         "files":[
+    #             {
+    #                 "type": "image",
+    #                 "transfer_method": "local_file",
+    #                 "upload_file_id": photo_id,
+    #             }
+    #         ]
+    #     }
+    #     # 请求dify服务
+    #     response = requests.post(url, headers=headers,json=data)
+    #     result = response.json()["answer"]
+    #     if result:
+    #         self.get_logger().info(f"\033[32m 从VLM助手得到回复: \n{result}\033[0m")
+    #         return result
+    #     else:
+    #         return None
+
+        # --------------------------------------------------------------
+
+        # 调用dify服务-agent服务
+        # url = "http://192.168.100.244/v1/chat-messages" 
+        # headers = {
+        #     "Authorization": dify_key,  # AI MCP
+        #     "Content-Type": "application/json"  
+        # }
+        # data = {
+        #     "inputs": {},
+        #     "query": str(messages_input),
+        #     "response_mode":"streaming",
+        #     "user":"leo",
+        #     "files":[
+        #         {
+        #             "type": "image",
+        #             "transfer_method": "local_file",
+        #             "upload_file_id": photo_id,
+        #             # "transfer_method": "remote_url",
+        #             # "url": photo_path,
+        #         }
+        #     ]
+        # }
+
+        # # 请求dify服务
+        # response = requests.post(url, headers=headers,json=data,stream=True)
+        
+        # # 针对streaming格式处理
+        # result = self.handle_dify_stream_response(response)
+        # self.get_logger().info(f"\033[32m完整回复: {result['content']}\033[0m")
+        # self.get_logger().info(f"知识库引用: {result['metadata'].get('retriever_resources', [])}")
+
+        # if result:
+        #     self.get_logger().info(f"\033[36m Qwen响应 : \n{result['content']}\033[0m")
+        #     return result['content']
+        # else:
+        #     return None
+
+        # --------------------------------------------------------------
 
 
         # 记录日志，检查响应的状态
@@ -268,6 +342,8 @@ class ChatLLMNode(Node):
         #################################################  
         # 从响应中获取消息内容
         # chunk = llm_response.output.choices[0]['message']['content']
+        # chunk = llm_response.json()["response"] # ollama
+        # chunk = llm_response.json()["answer"] # ollama
         chunk = llm_response.json()["response"]
         # 初始化消息文本，默认为None
         content = None
