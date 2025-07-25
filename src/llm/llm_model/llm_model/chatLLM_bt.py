@@ -22,7 +22,7 @@
 import ast
 import rclpy
 from rclpy.node import Node
-from llm_interfaces.srv import ChatLLM,BehavioursTree
+from llm_interfaces.srv import ChatLLM,BehavioursTree,ChildTree
 from std_msgs.msg import String
 
 # LLM related
@@ -45,6 +45,7 @@ class ChatLLMNode(Node):
         super().__init__("ChatLLM_node")
         # 创建行为树的服务端
         self.srv = self.create_service(BehavioursTree, "/llm_input", self.llm_srv_callback)
+        self.add_child_tree = self.create_client(ChildTree,"/add_child_tree")
 
     def handle_dify_stream_response(self,response):
         '''
@@ -174,6 +175,9 @@ class ChatLLMNode(Node):
         end_tag = "</think>"
         if start_tag in chunk and end_tag in chunk:
             chunk = re.sub(r'<think>.*?</think>', '', chunk, flags=re.DOTALL).strip()
+        
+        if not chunk.strip().startswith('{'):
+            chunk = '{' + chunk + '}'
 
         try:
             # 2.2 解析JSON响应,提取响应类型、响应内容、响应描述
@@ -187,7 +191,18 @@ class ChatLLMNode(Node):
         except (KeyError, json.JSONDecodeError) as e:
             self.get_logger().error(f"响应解析失败: {str(e)}")
 
+
         return response_type, response_data, response_description
+
+    def handle_info(self,info):
+        '''
+        处理info类型响应
+        '''
+        request = ChildTree.Request()
+        request.server_name = "audio_output"
+        request.server_type = "BehavioursTree"
+        request.server_parameters = info
+        self.add_child_tree.call_async(request)
 
     def handle_task_list(self,task_list):
         '''
@@ -199,6 +214,12 @@ class ChatLLMNode(Node):
             server_name = task["server_name"]
             server_type = task["server_type"]
             server_parameters = task["server_parameters"]
+
+            request = ChildTree.Request()
+            request.server_name = server_name
+            request.server_type = server_type
+            request.server_parameters = server_parameters
+            self.add_child_tree.call_async(request)
             
             # self.get_logger().info(f"任务: {server_name} {server_type} {server_parameters}")
 
@@ -222,13 +243,13 @@ class ChatLLMNode(Node):
                 response_type, response_data, response_description = self.get_response_classification(llm_response)
                 # 5. 根据响应类型分类处理
                 if response_type == "info":
-                    # self.handle_info(response_content)
                     self.get_logger().info(f"INFO处理完成: {response_description}...")
+                    self.handle_info(response_description)
                 elif response_type == "demo":
                     self.get_logger().info(f"DEMO执行: {response_description}...")
                 elif response_type == "task_list":
-                    self.handle_task_list(response_data)
                     self.get_logger().info(f"TASK LIST: {response_description}...")
+                    self.handle_task_list(response_data)
                 else:
                     self.get_logger().error(f"未知响应类型: {response_type}")
                 
@@ -238,8 +259,8 @@ class ChatLLMNode(Node):
                 self.get_logger().info(f"LLM processing success: {response_description}")
                 return response
             else:
-                # 如果没有生成响应，则从聊天历史中移除最后一条消息
-                config.chat_history.pop()
+                response.success = False
+                return response
         except Exception as e:
             self.get_logger().error(f"Service call exception: {str(e)}")
             response.success = False
