@@ -72,17 +72,23 @@ class AudioOutput(Node):
         Returns:
             None
         """
-        # 语音合成
-        output = self.sambert_hifigan_tts(input=request.input_data,voice='zhizhe_emo')
-        # 保存音频文件
-        wav = output[OutputKeys.OUTPUT_WAV]
-        with open(self.tmp_wav_file, 'wb') as f:
-            f.write(wav)
-        # 播放音频文件
-        self.play_wav()
-        response.success = True
-        response.output_data = "success"
-        return response
+        self.get_logger().info(f"audio_output_srv input_data: {request.input_data}")
+        try:
+            # 语音合成
+            output = self.sambert_hifigan_tts(input=request.input_data,voice='zhizhe_emo')
+            # 保存音频文件
+            wav = output[OutputKeys.OUTPUT_WAV]
+            with open(self.tmp_wav_file, 'wb') as f:
+                f.write(wav)
+            # 播放音频文件
+            self.play_wav()
+            response.success = True
+            response.output_data = "success"
+            return response
+        except Exception as e:
+            self.get_logger().error(f"Audio Output Exception: {str(e)}")
+            response.success = False
+            return response
 
 
 def main(args=None):
