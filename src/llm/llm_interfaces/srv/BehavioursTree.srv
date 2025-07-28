@@ -4,3 +4,9 @@ string input_data
 # 响应
 bool success
 string output_data
+# string[] output_data
+string type
+string server_type
+string server_name
+string server_parameters
+string json_configs

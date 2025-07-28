@@ -13,6 +13,7 @@ import time
 from rclpy.clock import Clock
 from rclpy.time import Duration
 import threading
+import json
 
 # # 首先创建全局黑板实例
 # blackboard = py_trees.blackboard.Blackboard()
@@ -104,7 +105,7 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
     def update(self):
         """执行代理调用"""
         # 如果还没有发送请求
-        if self.current_future is None or self.new_child:
+        if self.current_future is None:
             # 准备请求
             request = self.service_type.Request()
             # if hasattr(self.blackboard, 'proxy_input'):
@@ -126,6 +127,51 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
                     # self.blackboard.proxy_output = self.response.output_data
                     setattr(self.blackboard, self.WB, self.response.output_data)
                     self.logger.info(f"{self.blackboard}")
+                    ######################################################
+                    # 新增不同类型处理
+                    ######################################################
+                    if self.response.type == "task_list":
+                        try:
+                            # 1. 解析 JSON 字符串为 Python 对象
+                            configs = json.loads(self.response.json_configs)
+                            # 2. 验证数据结构
+                            if not isinstance(configs, list):
+                                self.get_logger().error("配置格式错误: 需要列表")
+                                return False
+                            # 3. 遍历配置列表
+                            for i, config in enumerate(configs, 1):
+                                # 4. 提取值
+                                server_name = config.get("server_name", f"unknown_{i}")
+                                server_type = config.get("server_type", "BehavioursTree")
+                                parameters = config.get("server_parameters", "")
+
+                                # 构建队列请求字典（与srv_add_tree结构一致）
+                                request_dict = {
+                                    'server_name': server_name,
+                                    'service_type': BehavioursTree,  # 固定服务类型
+                                    'new_child': True
+                                }
+                                
+                                # 添加到修改队列（需通过节点访问主类）
+                                if self.ros_node and hasattr(self.ros_node, 'add_modification_request'):
+                                    self.ros_node.add_modification_request(request_dict)
+                                else:
+                                    self.logger.error("无法访问修改队列！")
+                        except Exception as e:
+                            self.logger.error(f"处理task_list时出错: {str(e)}")
+                            return py_trees.common.Status.FAILURE
+                    elif self.response.type == "info":
+                        request_dict = {
+                                'server_name': self.response.server_name,
+                                'service_type': BehavioursTree,  # 固定服务类型
+                                'new_child': True
+                            }
+                        # 添加到修改队列（需通过节点访问主类）
+                        if self.ros_node and hasattr(self.ros_node, 'add_modification_request'):
+                            self.ros_node.add_modification_request(request_dict)
+                        else:
+                            self.logger.error("无法访问修改队列！")
+
                     ######################################################
                     # 新增的自我注销逻辑（从这里开始）
                     ######################################################
@@ -185,6 +231,13 @@ class BehaviorTreeBuilder(Node):
         if self.tree and self.is_tree_running:
             self.process_modification_queue()
 
+
+    def add_modification_request(self, request_dict):
+        """线程安全地添加修改请求"""
+        with self.modification_lock:
+            self.modification_queue.append(request_dict)
+            self.logger.info(f"添加子树请求: {request_dict['server_name']}")
+
     def srv_add_tree(self,request,response):
         """
         服务端回调函数，用于添加子行为树
@@ -205,7 +258,7 @@ class BehaviorTreeBuilder(Node):
             # node_name = request.server_name
             # server_type = BehavioursTree
             # server_name = request.server_name
-            # root = self.add_child_tree(root,node_name,server_type,server_name,new_child=True)
+            # root = self.build_subtree_node(root,node_name,server_type,server_name,new_child=True)
             # self.tree.setup(node=self,timeout=5)
             # self.logger.info("Behavior tree setup successfully")
 
@@ -228,13 +281,13 @@ class BehaviorTreeBuilder(Node):
         try:
             self.logger.info("开始添加子节点")
             # 3.1 语音识别客户端           
-            # root = self.add_child_tree(root,"Audio Input",BehavioursTree,"audio_input",new_child=False)
-            self.add_child_tree(root,"Audio Input",BehavioursTree,"audio_input",new_child=False)
+            # root = self.build_subtree_node(root,"Audio Input",BehavioursTree,"audio_input",new_child=False)
+            self.build_subtree_node(root,"Audio Input",BehavioursTree,"audio_input",new_child=False)
             # 3.2 llm调用客户端
-            # root = self.add_child_tree(root,"LLM Input",BehavioursTree,"llm_input",new_child=False)
-            self.add_child_tree(root,"LLM Input",BehavioursTree,"llm_input",new_child=False)
+            # root = self.build_subtree_node(root,"LLM Input",BehavioursTree,"llm_input",new_child=False)
+            self.build_subtree_node(root,"LLM Input",BehavioursTree,"llm_input",new_child=False)
             # 3.3 语音合成客户端
-            # root = self.add_child_tree(root,"Audio Output Proxy",BehavioursTree,"audio_output")
+            # root = self.build_subtree_node(root,"Audio Output Proxy",BehavioursTree,"audio_output")
             if not root:
                 self.logger.error("Failed to build behavior tree root")
                 return False
@@ -250,8 +303,8 @@ class BehaviorTreeBuilder(Node):
         return root
 
 
-    def add_child_tree(self,root_node,node_name,service_type,service_name,new_child):
-        """建立树子节点"""    
+    def build_subtree_node(self,root_node,node_name,service_type,service_name,new_child):
+        """构建树子节点实例"""    
         # 更新指定的黑板
         RB = self.blackboard_name
         if self.first_flag:
@@ -260,7 +313,7 @@ class BehaviorTreeBuilder(Node):
         self.blackboard_name = service_name
         WB = self.blackboard_name
 
-        child_node = ROSProxyBehaviour(
+        subtree_node = ROSProxyBehaviour(
             name=node_name,
             service_type=service_type,
             service_name=service_name,
@@ -269,11 +322,11 @@ class BehaviorTreeBuilder(Node):
             new_child=new_child
         )
         if new_child is False:
-            root_node.add_child(child_node)
+            root_node.add_child(subtree_node)
              
         self.logger.info(f"已构建 {str(node_name)}树节点")
         # return root
-        return child_node
+        return subtree_node
 
 
 
@@ -332,16 +385,21 @@ class BehaviorTreeBuilder(Node):
                     name="LLM Input", 
                     memory=True
                 )
-                new_root = self.add_child_tree(
+                new_subtree_node = self.build_subtree_node(
                     new_root,
                     request['server_name'],
                     request['service_type'],
                     request['server_name'],
                     request['new_child']
                 )
+
                 
                 # 动态添加到现有树
-                self.tree.root.add_child(new_root)
+                self.tree.root.add_child(new_subtree_node)
+                new_subtree_node.setup(node=self)
+                new_subtree_node.update()
+                # new_subtree_node.initialise()
+                
                 self.logger.info(f"已添加子树: {request['server_name']}")
                 
         except Exception as e:

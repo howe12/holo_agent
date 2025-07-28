@@ -198,11 +198,15 @@ class ChatLLMNode(Node):
         '''
         处理info类型响应
         '''
-        request = ChildTree.Request()
-        request.server_name = "audio_output"
-        request.server_type = "BehavioursTree"
-        request.server_parameters = info
-        self.add_child_tree.call_async(request)
+        # request = ChildTree.Request()
+        # request.server_name = "audio_output"
+        # request.server_type = "BehavioursTree"
+        # request.server_parameters = info
+        # self.add_child_tree.call_async(request)
+        server_name = "audio_output"
+        server_type = "BehavioursTree"
+        server_parameters = info
+        return server_name,server_type,server_parameters
 
     def handle_task_list(self,task_list):
         '''
@@ -215,11 +219,11 @@ class ChatLLMNode(Node):
             server_type = task["server_type"]
             server_parameters = task["server_parameters"]
 
-            request = ChildTree.Request()
-            request.server_name = server_name
-            request.server_type = server_type
-            request.server_parameters = server_parameters
-            self.add_child_tree.call_async(request)
+            # request = ChildTree.Request()
+            # request.server_name = server_name
+            # request.server_type = server_type
+            # request.server_parameters = server_parameters
+            # self.add_child_tree.call_async(request)
             
             # self.get_logger().info(f"任务: {server_name} {server_type} {server_parameters}")
 
@@ -244,12 +248,17 @@ class ChatLLMNode(Node):
                 # 5. 根据响应类型分类处理
                 if response_type == "info":
                     self.get_logger().info(f"INFO处理完成: {response_description}...")
-                    self.handle_info(response_description)
+                    response.type = response_type
+                    # self.handle_info(response_description)
+                    response.server_name,response.server_type,response_parameters = self.handle_info(response_description)
                 elif response_type == "demo":
+                    response.type = response_type
                     self.get_logger().info(f"DEMO执行: {response_description}...")
                 elif response_type == "task_list":
                     self.get_logger().info(f"TASK LIST: {response_description}...")
-                    self.handle_task_list(response_data)
+                    # self.handle_task_list(response_data)
+                    response.type = response_type
+                    response.json_configs = json.dumps(configs)
                 else:
                     self.get_logger().error(f"未知响应类型: {response_type}")
                 
