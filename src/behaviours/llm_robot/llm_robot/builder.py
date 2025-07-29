@@ -120,15 +120,51 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
         if self.current_future.done():
             try:
                 self.response = self.current_future.result()
+                self.logger.info(f"response内容为{self.response}")
                 
                 if self.response.success:
+                    ######################################################
+                    # 1.清理非基础树节点
+                    ######################################################
+                    # a. 获取父节点（必须是Sequence或Selector）
+                    parent = self.parent
+
+                    # b. 获取当前节点在父节点子节点列表中的索引
+                    child_index = parent.children.index(self)
+                    
+                    # c. 前一个节点是左侧相邻的兄弟节点
+                    if child_index > 0:
+                        previous_node = parent.children[child_index - 1]
+                        previous_node_name = previous_node.name
+                        self.logger.info(f"上一个执行节点: {previous_node_name}")
+                        # 检查是否为待清理节点
+                        if previous_node_name not in ["Audio Input", "LLM Input"]:
+                            # 通知构建器加入删除队列
+                            if self.ros_node and hasattr(self.ros_node, 'subtree_node_cleanup'):
+                                self.ros_node.subtree_node_cleanup(previous_node_name)
+                    else:
+                        previous_node = parent.children[-1]
+                        previous_node_name = previous_node.name
+                        self.logger.info(f"最后一个执行节点: {previous_node_name}")
+                        if previous_node_name not in ["Audio Input", "LLM Input"]:
+                            # 通知构建器加入删除队列
+                            if self.ros_node and hasattr(self.ros_node, 'subtree_node_cleanup'):
+                                self.ros_node.subtree_node_cleanup(previous_node_name)
+                        else:
+                            self.logger.info("当前是为基础节点，无前序节点")
+                    
+                    ######################################################
+                    # 2.通过黑板设置下一个节点的输入
+                    ######################################################
                     self.logger.info(f"Service call succeeded")
                     self.logger.info(f"response.output_data:\n {self.response.output_data}")
                     # self.blackboard.proxy_output = self.response.output_data
                     setattr(self.blackboard, self.WB, self.response.output_data)
                     self.logger.info(f"{self.blackboard}")
+                    self.logger.info(f"response.type:\n {self.response.type}")
+
                     ######################################################
-                    # 新增不同类型处理
+                    # 3.动态添加树节点
                     ######################################################
                     if self.response.type == "task_list":
                         try:
@@ -166,16 +202,18 @@ class ROSProxyBehaviour(py_trees.behaviour.Behaviour):
                                 'service_type': BehavioursTree,  # 固定服务类型
                                 'new_child': True
                             }
+                        self.logger.info(f"request_dict:{request_dict}")
                         # 添加到修改队列（需通过节点访问主类）
                         if self.ros_node and hasattr(self.ros_node, 'add_modification_request'):
                             self.ros_node.add_modification_request(request_dict)
                         else:
-                            self.logger.error("无法访问修改队列！")
+                            self.logger.error("无法访问修改队列！") 
+                    else:
 
-                    ######################################################
-                    # 新增的自我注销逻辑（从这里开始）
-                    ######################################################
-                    self.logger.info(f"parent_node:{self.parent.name}")
+                        ######################################################
+                        # 新增的自我注销逻辑（从这里开始）
+                        ######################################################
+                        self.logger.info(f"parent_node:{self.parent.name}")
 
                     return py_trees.common.Status.SUCCESS
                 else:
@@ -224,7 +262,7 @@ class BehaviorTreeBuilder(Node):
         self.modification_queue = []  # 树修改请求队列
         self.modification_lock = threading.Lock()  # 队列操作锁
 
-        self.modification_timer = self.create_timer(0.5, self.check_modifications)
+        self.modification_timer = self.create_timer(2, self.check_modifications)
 
     def check_modifications(self):
         """定时检查并处理修改队列"""
@@ -385,6 +423,7 @@ class BehaviorTreeBuilder(Node):
                     name="LLM Input", 
                     memory=True
                 )
+                
                 new_subtree_node = self.build_subtree_node(
                     new_root,
                     request['server_name'],
@@ -404,6 +443,19 @@ class BehaviorTreeBuilder(Node):
                 
         except Exception as e:
             self.logger.error(f"处理修改时出错: {str(e)}")
+
+    def subtree_node_cleanup(self,node_name):
+        """清理子树节点"""
+        if self.tree and self.tree.root:
+            # 1. 从行为树中移除节点
+            for child in self.tree.root.children:
+                if child.name == node_name:
+                    self.tree.root.remove_child(child)
+                    self.logger.info(f"已移除子树节点: {node_name}")
+            # 2. 清理黑板数据
+            if hasattr(self.blackboard, node_name):
+                self.blackboard.unset(node_name)
+                self.get_logger().info(f"已清理黑板数据: {node_name}")
 
     def tick_tree(self):
         """执行行为树tick"""

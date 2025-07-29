@@ -258,7 +258,7 @@ class ChatLLMNode(Node):
                     self.get_logger().info(f"TASK LIST: {response_description}...")
                     # self.handle_task_list(response_data)
                     response.type = response_type
-                    response.json_configs = json.dumps(configs)
+                    response.json_configs = json.dumps(response_data)
                 else:
                     self.get_logger().error(f"未知响应类型: {response_type}")
                 
